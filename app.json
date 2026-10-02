@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "3awedlou",
+    "slug": "3awedlou-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.awedlou.mobile"
+    },
+    "android": {
+      "package": "com.awedlou.mobile",
+      "softwareKeyboardLayoutMode": "pan",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#16a34a"
+      }
+    },
+    "extra": {
+      "apiDocs": "Connects to the Symfony backend documented in ../backend/docs/api-contract.md"
+    },
+    "plugins": [
+      "expo-sharing",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#0b100e"
+        }
+      ]
+    ]
+  }
+}
