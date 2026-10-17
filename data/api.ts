@@ -172,3 +172,57 @@ export interface MachineAlert {
   date: string
   read: boolean
 }
+
+/*
+ * ---------------------------------------------------------------------------
+ * AI agent (read-only assistant). Verified against the committed Symfony
+ * controller (src/Controller/Api/AgentController.php):
+ *
+ *   POST   /api/agent/chat               { conversationId?, message }
+ *   DELETE /api/agent/conversations/{id} -> { deleted, conversationId }
+ *   DELETE /api/agent/conversations      -> { deleted, count }
+ *
+ * There is NO conversation-list endpoint: the server loads the last
+ * AGENT_CONTEXT_MESSAGES messages itself, so the client sends ONLY the new
+ * message (never the transcript).
+ *
+ * Same field names as web-app/src/types/api.ts — keep both copies in sync.
+ * ---------------------------------------------------------------------------
+ */
+
+/** One read-only tool the assistant used for a turn. */
+export interface AgentToolCall {
+  name: string
+  /** Backend summary, e.g. "get_latest_telemetry: 12 row(s)". */
+  summary: string
+}
+
+/** Token accounting reported in `meta.usage` (wire keys input/output). */
+export interface AgentUsage {
+  input: number
+  output: number
+}
+
+export interface AgentAssistantMessage {
+  id: string
+  role: 'assistant'
+  content: string
+  toolCalls: AgentToolCall[]
+  createdAt: string
+}
+
+export interface AgentChatResponse {
+  conversationId: string
+  message: AgentAssistantMessage
+  usage: AgentUsage | null
+}
+
+export interface AgentConversationDeleted {
+  deleted: boolean
+  conversationId: string
+}
+
+export interface AgentConversationsDeleted {
+  deleted: boolean
+  count: number
+}
