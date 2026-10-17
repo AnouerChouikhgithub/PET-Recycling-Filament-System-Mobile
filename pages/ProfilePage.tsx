@@ -1,7 +1,10 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useState } from 'react'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
+import type { RootStackParamList } from '../lib/navigation'
 import { useAuth } from '../contexts/AuthContext'
 import { useMachine } from '../contexts/MachineContext'
 import { useTheme } from '../contexts/ThemeContext'
@@ -21,6 +24,7 @@ import {
   RefreshIcon,
   SettingsIcon,
   ShieldIcon,
+  SparklesIcon,
   SunIcon,
   UserIcon,
 } from '../components/icons'
@@ -40,6 +44,9 @@ export function ProfilePage() {
     refresh,
   } = useMachine()
   const insets = useSafeAreaInsets()
+  // Tab screens receive their own navigation object; pushing a stack route
+  // (AgentChat) bubbles up to the parent stack navigator.
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [aboutOpen, setAboutOpen] = useState(false)
   const [signOutOpen, setSignOutOpen] = useState(false)
 
@@ -241,6 +248,13 @@ export function ProfilePage() {
       <Card>
         <CardHead icon={<InfoIcon size={15} color={theme.text3} />} title="App" />
         <View style={{ marginTop: 4 }}>
+          <LinkRow
+            icon={<SparklesIcon size={16} color={theme.accentStrong} />}
+            iconBg={theme.accentSoft}
+            label="AI assistant"
+            sub="Read-only · machines, telemetry, events"
+            onPress={() => navigation.navigate('AgentChat')}
+          />
           <LinkRow
             icon={<InfoIcon size={16} color={theme.accentStrong} />}
             iconBg={theme.accentSoft}

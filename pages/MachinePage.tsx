@@ -1,7 +1,10 @@
 import { useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
+import type { RootStackParamList } from '../lib/navigation'
 import { useMachine } from '../contexts/MachineContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { useToast } from '../contexts/ToastContext'
@@ -20,10 +23,12 @@ import {
 import {
   ActivityIcon,
   CheckCircleIcon,
+  ChevronRightIcon,
   CpuIcon,
   FanIcon,
   PauseIcon,
   PlayIcon,
+  SparklesIcon,
   SpoolerIcon,
   ThermometerIcon,
   WarningIcon,
@@ -34,6 +39,8 @@ export function MachinePage() {
   const { machine, sensors, subsystems, telemetry, currentSession, realtimeMode, loading, error, refresh, pauseSession, resumeSession, stopSession, sendCommand } = useMachine()
   const toast = useToast()
   const insets = useSafeAreaInsets()
+  // Tab screens get their own navigator; pushing AgentChat bubbles to the stack.
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
 
   const [confirmStop, setConfirmStop] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -85,6 +92,48 @@ export function MachinePage() {
       }}
       showsVerticalScrollIndicator={false}
     >
+      {/* AI assistant entry — read-only, never a machine command */}
+      <Pressable
+        onPress={() => navigation.navigate('AgentChat')}
+        accessibilityRole="button"
+        accessibilityLabel="Open the AI assistant"
+        style={({ pressed }) => [
+          {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.md,
+            backgroundColor: theme.surface,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: theme.border,
+            borderRadius: radius.md,
+            padding: spacing.md,
+            opacity: pressed ? 0.85 : 1,
+          },
+        ]}
+      >
+        <View
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: radius.md,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: theme.accentSoft,
+          }}
+        >
+          <SparklesIcon size={18} color={theme.accentStrong} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontSize: 13.5, fontWeight: '800', color: theme.text }}>
+            Ask the AI assistant
+          </Text>
+          <Text style={{ fontSize: 12, color: theme.text2 }}>
+            Read-only · look up telemetry, events and fault codes
+          </Text>
+        </View>
+        <ChevronRightIcon size={17} color={theme.text3} />
+      </Pressable>
+
       {/* Connection banner (replaces the old demo banner) */}
       <View
         style={{
