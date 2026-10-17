@@ -47,6 +47,8 @@ Dev accounts (loaded by backend fixtures, dev only): `anouer@3awedlou.app` /
 | `npm run android` | Start + launch on a connected Android device/emulator |
 | `npm run ios` | Start + launch in the iOS simulator (macOS only) |
 | `npm run typecheck` | Strict TypeScript check (`tsc --noEmit`) |
+| `npm test` | Unit tests for the pure AI-assistant contract logic (Node's test runner) |
+| `npx expo export --platform android --output-dir dist` | Real Metro production bundle (a build smoke test without a device) |
 
 > `npm start -- -c` is mandatory after editing `.env` — Expo embeds the env
 > values into the bundle at start; a stale cache silently keeps the old values.
@@ -58,6 +60,7 @@ mobile-app/                     (this repository)
 ├── App.tsx                     # Providers (Auth → Machine) + tab/stack navigation
 ├── api/
 │   ├── client.ts               # fetch + Bearer token (secure store) + envelope + 401 flow
+│   ├── agent.ts                # AI assistant endpoints (chat, delete conversation(s))
 │   └── index.ts                # endpoint wrappers (auth, machines, telemetry, commands)
 ├── realtime/
 │   └── realtimeService.ts      # connect/subscribe/onTelemetry — polling today, WS later
@@ -68,10 +71,20 @@ mobile-app/                     (this repository)
 ├── data/
 │   ├── api.ts                  # API contract types (mirror of web-app/src/types/api.ts)
 │   └── types.ts                # UI-only types + re-exports of the contract
-├── pages/                      # Home, Machine, Recycling, Impact, Profile (+ History, Filament)
-├── components/                 # Shell, SessionCard, ui kit, charts, icons
-├── lib/                        # format, csv, storage
+├── pages/                      # Home, Machine, Recycling, Impact, Profile
+│   └── AgentChatPage.tsx       # AI assistant screen (stack route `AgentChat`)
+├── components/
+│   ├── Shell.tsx               # header, connection ribbon, tab bar, notifications
+│   ├── ui.tsx / charts.tsx / icons.tsx / SessionCard.tsx
+│   └── agent/                  # MessageBubble, ToolCallList, Composer, SuggestedPrompts, AgentNotices
+├── lib/
+│   ├── format.ts, storage.ts, navigation.ts
+│   ├── agentContract.ts        # PURE: limits, error mapping, payload parsers, validation
+│   ├── telemetryFreshness.ts   # PURE: fresh/stale/very-stale + "Not reported" rules
+│   └── useAgentChat.ts         # assistant state machine (explicit retry, no auto-POST)
+├── __tests__/                  # unit tests for the two pure modules above
 ├── theme/                      # design tokens + theme modes
+├── tsconfig.tests.json         # compiles the pure modules for `npm test`
 └── scripts/                    # generate-assets.py
 ```
 
@@ -169,10 +182,45 @@ placeholders.
 └── README.md
 ```
 
+## AI assistant (mobile)
+
+A read-only chat assistant lives at the stack route **`AgentChat`**, reachable
+from the **Machine** tab (“Ask the AI assistant” card) and **Profile → App →
+AI assistant**. It talks to the backend's agent API with the normal user JWT —
+no provider key is ever on the device — and it can only read machines,
+telemetry, events, fault codes and the activity log (there is no write tool, and
+the assistant code never imports the machine-command API).
+
+Step-by-step setup and a scripted test walkthrough (including how to test the
+model, the failure paths and the honesty rules):
+[`docs/ai-agent-mobile-step-by-step.md`](docs/ai-agent-mobile-step-by-step.md).
+Design notes (partly historical): [`docs/ai-agent-ui.md`](docs/ai-agent-ui.md).
+
+Backend requirements, in order:
+
+1. `AGENT_ENABLED=true` in the backend `.env.local` — a shell variable is **not**
+   enough under `php -S`/`symfony serve` (the built-in server hides process env
+   from Symfony, so `.env.local` wins).
+2. The agent migrations applied (`php bin/console doctrine:migrations:migrate -n`).
+3. `ANTHROPIC_API_KEY` in the backend `.env.local` for real answers (without it:
+   `503 AGENT_LLM_UNAVAILABLE`).
+
 ## Testing and quality
 
-Client tests are **not** wired in this checkout: `npm test` is not defined.
-Run `npm run typecheck` to validate the TypeScript. Linting is not configured.
+| Command | What it does |
+|---|---|
+| `npm run typecheck` | Strict `tsc --noEmit` over the whole app |
+| `npm test` | 29 unit tests: compiles the two pure modules with `tsc -p tsconfig.tests.json` into `.test-build/`, then runs them with Node's built-in test runner (`node --test __tests__/`). No test framework, no new dependencies |
+| `npx expo export --platform android --output-dir dist` | Bundles the app with Metro (proves the whole tree compiles, not just types) |
+
+Only the AI-assistant **pure logic** (`lib/agentContract.ts`,
+`lib/telemetryFreshness.ts`) is unit-tested, deliberately: it holds every
+contract rule (message limits, error mapping, payload parsing, freshness
+thresholds) and has no React Native imports, so it runs anywhere. There is **no
+component/render test framework** in this checkout (`jest-expo` +
+a renderer would be a large dependency change) — UI behaviour is verified on a
+device with the script in `docs/ai-agent-mobile-step-by-step.md` §4. Linting is
+not configured.
 
 ## Troubleshooting
 

@@ -1,4 +1,26 @@
-# AI Agent Chat UI - Mobile / Expo (docs only)
+# AI Agent Chat UI - Mobile / Expo (design note, now implemented)
+
+> **Status:** implemented in this repo (stack route `AgentChat`, see
+> `pages/AgentChatPage.tsx` and `lib/agentContract.ts`). The setup + test guide
+> is `docs/ai-agent-mobile-step-by-step.md`; the verified backend contract is
+> `../PET-Recycling-Filament-System-Backend/docs/api-contract.md` and the web
+> integration notes.
+>
+> Where this note is now out of date:
+>
+> * **§7 AppState pause is NOT implemented, deliberately.** Aborting an
+>   in-flight turn when the app is backgrounded would discard an answer whose
+>   tokens were already reserved, and React Native keeps the request alive
+>   briefly anyway. The turn is left to finish; there is no pause state. Abort
+>   happens only when the screen unmounts.
+> * **§2 SSE / streaming** stays Future: the backend is non-streaming and the
+>   app implements one JSON round trip per turn.
+> * **§8 the phase-2 confirmation card is out of scope**: the assistant is
+>   read-only (no write tool on the backend), so there is nothing to confirm.
+> * The disabled state is detected as `404` **without** `AGENT_NOT_FOUND`; the
+>   `AGENT_DISABLED` string is the message, the code is `NOT_FOUND`.
+> * Entry points are the Machine-tab card and the Profile → App row (no separate
+>   header icon), and the composer clears immediately on send.
 
 Fits the existing app: React Native 0.86 + Expo 57, react-navigation
 (bottom-tabs + native-stack), api client in api/client.ts + data/api.ts
