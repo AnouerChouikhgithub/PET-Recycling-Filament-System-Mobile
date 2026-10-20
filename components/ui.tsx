@@ -85,6 +85,8 @@ export function AppButton({
       onPress={onPress}
       disabled={off}
       hitSlop={4}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: off }}
       style={({ pressed }) => [
         {
           backgroundColor: bg,

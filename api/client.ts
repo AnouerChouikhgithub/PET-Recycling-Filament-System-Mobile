@@ -150,8 +150,12 @@ export async function requestRaw<T>(path: string, options: RequestOptions = {}):
   }
 }
 
+/**
+ * Convenience wrappers over `request()`. There is deliberately no `del()`:
+ * DELETE is used only by the agent module, which needs `requestRaw()` (status
+ * and headers), so a third helper would be dead code (BUGS-TO-FIX F8).
+ */
 export const api = {
   get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { method: 'GET', signal }),
   post: <T>(path: string, body?: unknown, signal?: AbortSignal) => request<T>(path, { method: 'POST', body, signal }),
-  del: <T>(path: string, signal?: AbortSignal) => request<T>(path, { method: 'DELETE', signal }),
 }
