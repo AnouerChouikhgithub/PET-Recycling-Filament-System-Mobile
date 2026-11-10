@@ -44,7 +44,7 @@ export interface AgentChat {
   conversationId: string | null
   sending: boolean
   notice: AgentNotice | null
-  /** 404 without AGENT_NOT_FOUND — the whole assistant surface is switched off. */
+  /** The backend's explicit AGENT_DISABLED response means the surface is switched off. */
   disabled: boolean
   /** Seconds left before the per-user rate limit window reopens (null = none). */
   rateLimitRemainingSeconds: number | null
