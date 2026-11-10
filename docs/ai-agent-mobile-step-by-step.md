@@ -31,7 +31,7 @@ It is **read-only** and it is **not** streaming: one question → one answer
 
 | Item | Notes |
 |---|---|
-| Node.js + npm | ≥ 18 (tested on Node 20) |
+| Node.js + npm | 24 (pinned in `.nvmrc`) |
 | Expo Go on the phone | App Store / Play Store |
 | Phone and PC on the same Wi‑Fi | Or use an Android emulator |
 | PostgreSQL for the backend | e.g. the `3awedlou-postgres` Docker container |
@@ -179,7 +179,7 @@ Scan the QR code with Expo Go (Android) or the Camera app (iOS).
 
 ```bash
 npm run typecheck          # tsc --noEmit, strict
-npm test                   # 29 unit tests of the pure logic (Node's test runner)
+npm test                   # 47 pure-logic tests (Node) + Jest render tests
 npx expo export --platform android --output-dir dist   # real Metro bundle
 ```
 
@@ -320,7 +320,7 @@ Sign in first (dev fixtures): `anouer@3awedlou.app` / `3awedlou-dev`.
 ```bash
 cd PET-Recycling-Filament-System-Mobile
 npm run typecheck                    # exit 0
-npm test                             # 29 tests, exit 0
+npm test                             # 47 pure tests + render tests, exit 0
 npx expo export --platform android --output-dir dist   # exit 0 (Android bundle)
 ```
 
@@ -391,7 +391,7 @@ node -e '
 | Check | Result |
 |---|---|
 | `npm run typecheck` (strict, `noUnusedLocals`) | **exit 0** |
-| `npm test` (contract + freshness tests) | **29 tests, all passing**, exit 0 |
+| `npm test` (pure + render tests) | **47 pure tests + Jest render tests, all passing**, exit 0 |
 | `npx expo export --platform android` | **exit 0** — 1010 modules, 2.4 MB Hermes bundle |
 | Live `POST /api/agent/chat` (new conversation) | **200** with `conversationId` + assistant message + `meta.usage` |
 | Live continuation with a real `conversationId` | **NOT verified** — the harness sent an empty id, which the server correctly answered with **404 `AGENT_NOT_FOUND`** (that mapping *is* verified). The continuation payload is covered by unit tests and by the app's verified request shape |

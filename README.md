@@ -5,8 +5,9 @@ Native mobile application for the 3awedlou smart PET recycling machine.
 Built with **React Native 0.86.3 + Expo SDK 57.0.25 + TypeScript 6.0.3** and
 React Navigation v7 (bottom tabs + native stack). Device auth uses
 `expo-secure-store` (hardware-backed, never plain AsyncStorage). Machine data
-— telemetry, sessions, production, recycling — is fetched from the API; alerts
-are derived from real machine state on the backend.
+— telemetry, sessions, production, recycling — is fetched from the API. Alerts
+are derived in the app from that real backend state; the backend has no alert
+resource.
 
 The app talks to the **same Symfony backend as the web app** — one API, one JWT
 scheme, one contract (see [`../backend/docs/api-contract.md`](../backend/docs/api-contract.md)).
@@ -47,7 +48,7 @@ Dev accounts (loaded by backend fixtures, dev only): `anouer@3awedlou.app` /
 | `npm run android` | Start + launch on a connected Android device/emulator |
 | `npm run ios` | Start + launch in the iOS simulator (macOS only) |
 | `npm run typecheck` | Strict TypeScript check (`tsc --noEmit`) |
-| `npm test` | Unit tests for the pure AI-assistant contract logic (Node's test runner) |
+| `npm test` | Compiles the pure modules and runs the Node tests, then the Jest render tests |
 | `npx expo export --platform android --output-dir dist` | Real Metro production bundle (a build smoke test without a device) |
 
 > `npm start -- -c` is mandatory after editing `.env` — Expo embeds the env
@@ -79,7 +80,10 @@ mobile-app/                     (this repository)
 │   └── agent/                  # MessageBubble, ToolCallList, Composer, SuggestedPrompts, AgentNotices
 ├── lib/
 │   ├── format.ts, storage.ts, navigation.ts
+│   ├── alerts.ts               # PURE: alert read/unread bookkeeping
 │   ├── agentContract.ts        # PURE: limits, error mapping, payload parsers, validation
+│   ├── commandDelivery.ts      # PURE: broker/queued/acknowledged command wording
+│   ├── machineView.ts          # PURE: null- and freshness-aware sensor/subsystem models
 │   ├── telemetryFreshness.ts   # PURE: fresh/stale/very-stale + "Not reported" rules
 │   └── useAgentChat.ts         # assistant state machine (explicit retry, no auto-POST)
 ├── __tests__/                  # unit tests for the two pure modules above
@@ -97,22 +101,24 @@ Key rules:
   before anything reaches hardware.
 * **No fabricated data** — sensors show what the machine last reported; totals
   come from measured recycling records; estimates are labelled.
-* **Honest realtime** — without a realtime URL the app polls every 10 s and says
-  so in the UI; the `RealtimeService` interface is already the WebSocket
-  contract.
+* **Honest realtime** — the app polls every 10 s and labels the transport
+  `polling`; a configured URL does not switch it to a stream, because no
+  WebSocket client exists yet. The `RealtimeService` interface is the contract
+  that transport will implement.
 
 ## Polling / realtime (honest status)
 
-`src/realtime/realtimeService.ts` runs an honest `REFRESH_MS = 10_000` (10 s)
-poll of `GET /machines/{id}/dashboard` when `EXPO_PUBLIC_REALTIME_URL` is empty,
-and labels the transport `polling` in the UI (Shell, Machine, Profile and about
-sheets all say `10 s refresh`). There is **no WebSocket/SSE client**: the
-`RealtimeService` interface is the contract the future transport will implement.
+`realtime/realtimeService.ts` runs an honest `REFRESH_MS = 10_000` (10 s) poll
+of `GET /machines/{id}/dashboard` and labels the transport `polling` in the UI
+(Shell, Machine, Profile and about sheets all say `10 s refresh`). There is **no
+WebSocket/SSE client**, so `EXPO_PUBLIC_REALTIME_URL` is only a placeholder for
+the future endpoint: setting it does **not** enable a stream or disable polling.
+The `RealtimeService` interface is the contract that transport will implement.
 
-Known limitation: because the poll runs on a `setInterval`, a hidden tab
-(real Android/iOS backgrounded app) stops the timer while the app is not in the
-foreground and does not resume it automatically — the dashboard freezes while
-the app is backgrounded. This is documented, not a bug.
+Background behaviour is implemented, not a known freeze: the service listens to
+`AppState`, stops the 10 s timer when the app leaves the foreground, and polls
+immediately when it returns. A backgrounded app therefore shows fresh data on
+resume instead of a stale frozen dashboard.
 
 ## Screenshots
 
@@ -142,18 +148,19 @@ place them here; the gallery displays the committed files.
 
 | Tool | Version |
 |---|---|
-| Node.js | ≥ 18 |
-| npm | ≥ 9 |
+| Node.js | 24 (pinned in `.nvmrc`; CI reads the same file) |
+| npm | ≥ 10 |
 
-`package.json` declares no `engines` field; these are the versions used in this
-checkout. Expo SDK 57.0.25 and React Native 0.86.3 are pinned by the lockfile.
+`package.json` declares `engines.node >= 24` and `.nvmrc` pins the major, so the
+local shell and CI use one version. Expo SDK 57.0.25 and React Native 0.86.3 are
+pinned by the lockfile.
 
 ## Configuration
 
 | Variable | Required | Default | Meaning | Example placeholder |
 |---|---|---|---|---|
 | `EXPO_PUBLIC_API_BASE_URL` | yes | `http://YOUR_LAN_IP:8000/api` | Symfony API base; the same backend the web app uses | `http://YOUR_LAN_IP:8000/api` |
-| `EXPO_PUBLIC_REALTIME_URL` | no | *(empty)* | WebSocket/SSE endpoint; empty = honest 10 s polling | `ws://127.0.0.1:8080/ws` |
+| `EXPO_PUBLIC_REALTIME_URL` | no | *(empty)* | Placeholder for the future WebSocket/SSE endpoint; the app polls every 10 s regardless | `ws://127.0.0.1:8080/ws` |
 | `EXPO_PUBLIC_ENVIRONMENT` | no | `development` | Shown in the UI footer, log verbosity | `production` |
 
 No secrets are used by the client. `EXPO_PUBLIC_*` values are embedded in the
@@ -210,17 +217,15 @@ Backend requirements, in order:
 | Command | What it does |
 |---|---|
 | `npm run typecheck` | Strict `tsc --noEmit` over the whole app |
-| `npm test` | 29 unit tests: compiles the two pure modules with `tsc -p tsconfig.tests.json` into `.test-build/`, then runs them with Node's built-in test runner (`node --test __tests__/`). No test framework, no new dependencies |
+| `npm test` | Compiles the pure modules with `tsc -p tsconfig.tests.json` into `.test-build/`, runs 47 Node tests (`npm run test:unit`), then the Jest render tests (`npm run test:render`) |
 | `npx expo export --platform android --output-dir dist` | Bundles the app with Metro (proves the whole tree compiles, not just types) |
 
-Only the AI-assistant **pure logic** (`lib/agentContract.ts`,
-`lib/telemetryFreshness.ts`) is unit-tested, deliberately: it holds every
-contract rule (message limits, error mapping, payload parsing, freshness
-thresholds) and has no React Native imports, so it runs anywhere. There is **no
-component/render test framework** in this checkout (`jest-expo` +
-a renderer would be a large dependency change) — UI behaviour is verified on a
-device with the script in `docs/ai-agent-mobile-step-by-step.md` §4. Linting is
-not configured.
+The pure modules (`lib/agentContract.ts`, `lib/telemetryFreshness.ts`,
+`lib/machineView.ts`, `lib/commandDelivery.ts`, `lib/alerts.ts`) have no React
+Native imports, so `node --test` exercises them directly: contract rules,
+freshness thresholds, null-vs-zero telemetry, delivery wording and alert
+read-state. Jest (`jest-expo` + Testing Library) covers the render behaviour in
+`*.render.test.tsx`. Linting is not configured.
 
 ## Troubleshooting
 
@@ -237,8 +242,9 @@ not configured.
 
 ## Security notes
 
-* Device tokens are hashed at rest; API auth is JWT (RS256, 1 h TTL) with
-  single-use refresh tokens, stored in `expo-secure-store`.
+* Device tokens are hashed at rest; API auth is JWT (RS256, 1 h TTL). The app
+  stores only the **access token** in `expo-secure-store`; refresh-token storage
+  and logout revocation are not implemented on mobile yet (tracked as M04).
 * Auth surface is rate-limited (login 5/5 min, register 3/10 min per IP).
 * `EXPO_PUBLIC_*` values are **never** secrets — they are embedded in the
   bundle. No tokens, passwords, broker credentials or JWT keys are stored in
