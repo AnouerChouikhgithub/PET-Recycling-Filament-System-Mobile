@@ -9,6 +9,8 @@ import { useMachine } from '../contexts/MachineContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { useToast } from '../contexts/ToastContext'
 import { timeAgo } from '../lib/format'
+import { commandDeliveryMessage } from '../lib/commandDelivery'
+import type { MachineCommandResult } from '../data/api'
 import { radius, spacing } from '../theme/tokens'
 import { Sparkline } from '../components/charts'
 import {
@@ -47,11 +49,11 @@ export function MachinePage() {
 
   const disconnected = !machine.connected
 
-  const run = async (action: () => Promise<void>, done?: string) => {
+  const run = async (action: () => Promise<MachineCommandResult>) => {
     setBusy(true)
     try {
-      await action()
-      if (done) toast.push('success', done, 'Command accepted by the backend.')
+      const result = await action()
+      toast.push('success', 'Command accepted', commandDeliveryMessage(result))
     } catch (err) {
       toast.push('error', 'Command rejected', (err as Error).message)
     } finally {
@@ -169,7 +171,7 @@ export function MachinePage() {
             title="Machine offline"
             text={
               machine.deviceName !== '—'
-                ? `“${machine.deviceName}” has not reported recently. Sensor values show the last known state.`
+                ? `“${machine.deviceName}” has not reported recently. Stale sensor readings are marked unavailable.`
                 : 'No machine data available.'
             }
             action={loading ? undefined : 'Refresh'}
@@ -182,16 +184,16 @@ export function MachinePage() {
           <Card>
             <CardHead
               icon={<ActivityIcon size={15} color={theme.text3} />}
-              title="Live sensor readings"
+              title="Latest sensor readings"
               action={
                 <Badge tone="success">
-                  {telemetry ? timeAgo(telemetry.recordedAt) : 'Awaiting data'}
+                  {telemetry ? `Reported ${timeAgo(telemetry.recordedAt)}` : 'Awaiting data'}
                 </Badge>
               }
             />
             <View style={{ marginTop: 4 }}>
               {sensors.map((s, idx) => {
-                const noData = s.history.length === 0
+                const noData = s.value == null
                 return (
                   <View
                     key={s.id}
@@ -208,7 +210,7 @@ export function MachinePage() {
                         </Text>
                       </View>
                       <Text style={{ fontSize: 11, color: theme.text3, fontWeight: '600', marginTop: 3 }}>
-                        Target {s.target} {s.unit}
+                        {s.target == null ? 'Target not reported' : `Target ${s.target} ${s.unit}`}
                       </Text>
                     </View>
                     <View style={{ alignItems: 'flex-end', gap: 4 }}>
@@ -218,8 +220,8 @@ export function MachinePage() {
                       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
                         {!noData && <Sparkline data={s.history} status={s.status} />}
                         <Text style={{ fontSize: 16, fontWeight: '800', color: theme.text }}>
-                          {noData ? '—' : s.value.toFixed(s.decimals ?? 0)}
-                          {!noData && <Text style={{ fontSize: 10.5, color: theme.text3, fontWeight: '700' }}> {s.unit}</Text>}
+                          {s.value == null ? 'Not reported' : s.value.toFixed(s.decimals ?? 0)}
+                          {s.value != null && <Text style={{ fontSize: 10.5, color: theme.text3, fontWeight: '700' }}> {s.unit}</Text>}
                         </Text>
                       </View>
                     </View>
@@ -235,6 +237,7 @@ export function MachinePage() {
             <View style={styles.subGrid}>
               {subsystems.map((sub) => {
                 const on = sub.state === 'on'
+                const known = sub.state !== 'unknown'
                 return (
                   <View
                     key={sub.key}
@@ -259,14 +262,9 @@ export function MachinePage() {
                         {sub.detail}
                       </Text>
                     </View>
-                    <View
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: 3,
-                        backgroundColor: on ? theme.green500 : theme.text3,
-                      }}
-                    />
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: known ? theme.text3 : theme.warning }}>
+                      {on ? 'On' : known ? 'Off' : 'Unknown'}
+                    </Text>
                   </View>
                 )
               })}
@@ -304,11 +302,11 @@ export function MachinePage() {
                   </Text>
                   <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                     {machine.status === 'paused' ? (
-                      <AppButton variant="success" style={{ flex: 1 }} disabled={busy} onPress={() => run(resumeSession, 'Resumed')}>
+                      <AppButton variant="success" style={{ flex: 1 }} disabled={busy} onPress={() => void run(resumeSession)}>
                         <ButtonContent icon={<PlayIcon size={16} color={theme.success} />} label="Resume" color={theme.success} />
                       </AppButton>
                     ) : (
-                      <AppButton variant="secondary" style={{ flex: 1 }} disabled={busy} onPress={() => run(pauseSession, 'Paused')}>
+                      <AppButton variant="secondary" style={{ flex: 1 }} disabled={busy} onPress={() => void run(pauseSession)}>
                         <ButtonContent icon={<PauseIcon size={16} color={theme.text} />} label="Pause" color={theme.text} />
                       </AppButton>
                     )}
@@ -320,14 +318,13 @@ export function MachinePage() {
               ) : (
                 <>
                   <Text style={{ fontSize: 12.5, color: theme.text2, lineHeight: 18 }}>
-                    No session is running. The guarded command pipeline (start · pause · resume ·
-                    stop · setTargetTemperature · setMotorSpeed · setFan) is live end-to-end —
-                    session start from the app arrives with the firmware phase.
+                    No active session is reported. Commands are validated by the backend; broker
+                    acceptance does not confirm that the machine physically executed them.
                   </Text>
                   <AppButton
                     variant="secondary"
                     disabled={busy}
-                    onPress={() => run(() => sendCommand('start'), 'Start command sent')}
+                    onPress={() => void run(() => sendCommand('start'))}
                   >
                     <ButtonContent icon={<PlayIcon size={16} color={theme.text} />} label="Send start command" color={theme.text} />
                   </AppButton>
@@ -343,7 +340,7 @@ export function MachinePage() {
         open={confirmStop}
         onClose={() => setConfirmStop(false)}
         title="Stop this session?"
-        subtitle="A stop command will be validated by the backend and sent to the machine."
+        subtitle="The backend may accept or queue the command; physical execution is not guaranteed."
         actions={
           <>
             <AppButton variant="secondary" style={{ flex: 1 }} onPress={() => setConfirmStop(false)}>
@@ -355,7 +352,7 @@ export function MachinePage() {
               disabled={busy}
               onPress={() => {
                 setConfirmStop(false)
-                void run(stopSession, 'Stop command sent')
+                void run(stopSession)
               }}
             >
               Stop session
@@ -376,8 +373,8 @@ export function MachinePage() {
         >
           <CheckCircleIcon size={16} color={theme.text3} />
           <Text style={{ flex: 1, fontSize: 12, lineHeight: 18, color: theme.text2 }}>
-            Stopping ramps the heater down safely and winds the remaining filament onto the spool.
-            The machine confirms completion through telemetry.
+            The backend can accept or queue the stop command. Check fresh telemetry to confirm
+            whether the machine changed state; physical completion is not guaranteed.
           </Text>
         </View>
       </Sheet>

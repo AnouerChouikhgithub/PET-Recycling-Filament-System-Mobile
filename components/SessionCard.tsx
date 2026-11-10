@@ -1,8 +1,12 @@
+import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { useMachine } from '../contexts/MachineContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { timeAgo } from '../lib/format'
+import type { MachineCommandResult } from '../data/api'
+import { commandDeliveryMessage } from '../lib/commandDelivery'
+import { useToast } from '../contexts/ToastContext'
 import { radius, spacing } from '../theme/tokens'
 import { AppButton, Badge, ButtonContent, Card } from './ui'
 import { PauseIcon, PlayIcon, RecycleIcon, StopIcon } from './icons'
@@ -16,8 +20,23 @@ const STATUS_META: Record<string, { label: string; tone: 'warning' | 'accent' | 
 }
 
 export function SessionCard({ onStartSession }: { onStartSession?: () => void }) {
-  const { machine, currentSession, telemetry, pauseSession, resumeSession, stopSession } = useMachine()
+  const { machine, currentSession, sensors, pauseSession, resumeSession, stopSession } = useMachine()
   const { theme } = useTheme()
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+
+  const runCommand = async (action: () => Promise<MachineCommandResult>) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const result = await action()
+      toast.push('success', 'Command accepted', commandDeliveryMessage(result))
+    } catch (error) {
+      toast.push('error', 'Command rejected', (error as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   if (!currentSession) {
     return (
@@ -48,7 +67,7 @@ export function SessionCard({ onStartSession }: { onStartSession?: () => void })
             }}
           >
             {machine.connected
-              ? 'The machine is idle. Start a run from the machine once firmware control lands.'
+              ? 'No active session is reported. Use the machine controls to send a start command; physical execution is confirmed by telemetry.'
               : 'The machine is offline — last known state shown.'}
           </Text>
           {onStartSession && machine.connected && (
@@ -63,7 +82,7 @@ export function SessionCard({ onStartSession }: { onStartSession?: () => void })
 
   const meta = STATUS_META[machine.status] ?? STATUS_META.idle
   const paused = currentSession.status === 'paused'
-  const temp = telemetry?.temperature
+  const temp = sensors.find((sensor) => sensor.id === 'temp')?.value ?? null
 
   return (
     <Card>
@@ -82,10 +101,10 @@ export function SessionCard({ onStartSession }: { onStartSession?: () => void })
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={{ fontSize: 14.5, fontWeight: '800', color: theme.text }}>
-            Session running
+            Session marked in progress
           </Text>
           <Text style={{ fontSize: 12, color: theme.text2 }}>
-            {paused ? 'Paused' : 'Running'} · started {timeAgo(currentSession.startedAt)}
+            {paused ? 'Paused' : 'In progress'} · started {timeAgo(currentSession.startedAt)}
           </Text>
         </View>
         <Badge tone={meta.tone} dot>
@@ -105,15 +124,15 @@ export function SessionCard({ onStartSession }: { onStartSession?: () => void })
 
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
           {paused ? (
-            <AppButton variant="success" size="sm" style={{ flex: 1 }} onPress={() => void resumeSession()}>
+            <AppButton variant="success" size="sm" style={{ flex: 1 }} disabled={busy} onPress={() => void runCommand(resumeSession)}>
               <ButtonContent icon={<PlayIcon size={15} color={theme.success} />} label="Resume" color={theme.success} size="sm" />
             </AppButton>
           ) : (
-            <AppButton variant="secondary" size="sm" style={{ flex: 1 }} onPress={() => void pauseSession()}>
+            <AppButton variant="secondary" size="sm" style={{ flex: 1 }} disabled={busy} onPress={() => void runCommand(pauseSession)}>
               <ButtonContent icon={<PauseIcon size={15} color={theme.text} />} label="Pause" color={theme.text} size="sm" />
             </AppButton>
           )}
-          <AppButton variant="danger" size="sm" style={{ flex: 1 }} onPress={() => void stopSession()}>
+          <AppButton variant="danger" size="sm" style={{ flex: 1 }} disabled={busy} onPress={() => void runCommand(stopSession)}>
             <ButtonContent icon={<StopIcon size={14} color={theme.danger} />} label="Stop" color={theme.danger} size="sm" />
           </AppButton>
         </View>

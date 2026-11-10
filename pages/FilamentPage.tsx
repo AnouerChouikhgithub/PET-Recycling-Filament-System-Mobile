@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
@@ -6,7 +6,9 @@ import { useNavigation } from '@react-navigation/native'
 import { machinesApi } from '../api'
 import { useMachine } from '../contexts/MachineContext'
 import { useTheme } from '../contexts/ThemeContext'
-import { formatDateTime, timeAgo } from '../lib/format'
+import * as Sharing from 'expo-sharing'
+import { File, Paths } from 'expo-file-system'
+import { formatDateTime, timeAgo, toCsv } from '../lib/format'
 import { radius, spacing } from '../theme/tokens'
 import {
   AppButton,
@@ -41,26 +43,29 @@ export function FilamentPage() {
   const [batches, setBatches] = useState<FilamentProduction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const loadRequest = useRef(0)
 
-  useEffect(() => {
+  const loadBatches = useCallback(async () => {
     if (!selectedId) return
-    let cancelled = false
+    const request = ++loadRequest.current
     setLoading(true)
-    machinesApi
-      .production(selectedId, { limit: 100 })
-      .then((rows) => {
-        if (!cancelled) setBatches(rows)
-      })
-      .catch((err) => {
-        if (!cancelled) setError((err as Error).message)
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
+    setError(null)
+    try {
+      const rows = await machinesApi.production(selectedId, { limit: 100 })
+      if (request === loadRequest.current) setBatches(rows)
+    } catch (err) {
+      if (request === loadRequest.current) setError((err as Error).message)
+    } finally {
+      if (request === loadRequest.current) setLoading(false)
     }
   }, [selectedId])
+
+  useEffect(() => {
+    void loadBatches()
+    return () => {
+      loadRequest.current += 1
+    }
+  }, [loadBatches])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -77,7 +82,11 @@ export function FilamentPage() {
       .sort((a, b) => b.producedAt.localeCompare(a.producedAt))
   }, [batches, query, quality])
 
-  const totalWeightG = batches.reduce((a, b) => a + b.weightGrams, 0)
+  const reportedWeights = batches
+    .map((batch) => batch.weightGrams)
+    .filter((weight): weight is number => weight != null)
+  const totalWeightG = reportedWeights.reduce((total, weight) => total + weight, 0)
+  const knownWeightCount = reportedWeights.length
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -99,7 +108,11 @@ export function FilamentPage() {
             {batches.length} batches on the shelf.
           </Text>
           <Text style={{ fontSize: 13, color: theme.text2 }}>
-            {(totalWeightG / 1000).toFixed(1)} kg of rPET filament produced from recycled bottles.
+            {knownWeightCount === 0
+              ? 'Filament weight has not been reported.'
+              : knownWeightCount === batches.length
+                ? `${(totalWeightG / 1000).toFixed(1)} kg of rPET filament produced from recycled bottles.`
+                : `${(totalWeightG / 1000).toFixed(1)} kg measured; ${batches.length - knownWeightCount} batch weight(s) not reported.`}
           </Text>
         </View>
 
@@ -123,7 +136,7 @@ export function FilamentPage() {
           </Card>
         ) : error ? (
           <Card>
-            <StateBlock kind="offline" title="Backend unreachable" text={error} action="Refresh" onAction={() => setError(null)} />
+            <StateBlock kind="offline" title="Backend unreachable" text={error} action="Refresh" onAction={() => void loadBatches()} />
           </Card>
         ) : filtered.length === 0 ? (
           <Card>
@@ -176,7 +189,7 @@ function BatchCard({ batch: b, onClick }: { batch: FilamentProduction; onClick: 
           </Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>{Math.round(b.weightGrams)} g</Text>
+          <Text style={{ fontSize: 15, fontWeight: '800', color: theme.text }}>{b.weightGrams == null ? 'Not reported' : `${Math.round(b.weightGrams)} g`}</Text>
           {b.lengthMeters != null && (
             <Text style={{ fontSize: 11, color: theme.text3, fontWeight: '600' }}>{Math.round(b.lengthMeters)} m</Text>
           )}
@@ -188,9 +201,31 @@ function BatchCard({ batch: b, onClick }: { batch: FilamentProduction; onClick: 
 
 function BatchDetailSheet({ batch, onClose }: { batch: FilamentProduction | null; onClose: () => void }) {
   const { theme } = useTheme()
-  const [exported, setExported] = useState(false)
+  const [exportMessage, setExportMessage] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   if (!batch) return null
   const b = batch
+
+  const exportSpecSheet = async () => {
+    setExporting(true)
+    try {
+      const file = new File(Paths.cache, `${b.batchCode}-spec.csv`)
+      file.write(toCsv([
+        ['Batch', 'Produced', 'Material', 'Color', 'Diameter target (mm)', 'Diameter actual (mm)', 'Weight (g)', 'Length (m)', 'Quality', 'Notes'],
+        [b.batchCode, b.producedAt, b.material, b.color, b.diameterTarget, b.diameterActual ?? '', b.weightGrams ?? '', b.lengthMeters ?? '', b.quality, b.notes ?? ''],
+      ]))
+      if (!(await Sharing.isAvailableAsync())) {
+        setExportMessage('Sharing is not available on this device')
+        return
+      }
+      await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: 'Export filament spec sheet' })
+      setExportMessage('Spec sheet shared')
+    } catch {
+      setExportMessage('Spec sheet export failed')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <Sheet
@@ -202,12 +237,10 @@ function BatchDetailSheet({ batch, onClose }: { batch: FilamentProduction | null
         <AppButton
           variant="secondary"
           block
-          onPress={() => {
-            setExported(true)
-            setTimeout(() => setExported(false), 2200)
-          }}
+          disabled={exporting}
+          onPress={() => void exportSpecSheet()}
         >
-          {exported ? 'Spec sheet saved' : 'Export spec sheet'}
+          {exporting ? 'Preparing…' : exportMessage ?? 'Export spec sheet'}
         </AppButton>
       }
     >
@@ -241,7 +274,7 @@ function BatchDetailSheet({ batch, onClose }: { batch: FilamentProduction | null
             {b.material} filament
           </Text>
           <Text style={{ fontSize: 12, color: theme.text2 }}>
-            Wound on spool · {Math.round(b.weightGrams)} g
+            {b.weightGrams == null ? 'Weight not reported' : `${Math.round(b.weightGrams)} g`}
             {b.lengthMeters != null ? ` · ${Math.round(b.lengthMeters)} m` : ''}
           </Text>
           <Badge tone={QUALITY_TONE[b.quality]}>{b.quality} quality</Badge>
@@ -253,7 +286,7 @@ function BatchDetailSheet({ batch, onClose }: { batch: FilamentProduction | null
         <SpecRow k="Material" v={b.material} />
         <SpecRow k="Diameter target" v={`${b.diameterTarget.toFixed(2)} mm`} />
         <SpecRow k="Diameter actual" v={b.diameterActual != null ? `${b.diameterActual.toFixed(2)} mm` : '—'} />
-        <SpecRow k="Weight" v={`${Math.round(b.weightGrams)} g`} />
+        <SpecRow k="Weight" v={b.weightGrams == null ? 'Not reported' : `${Math.round(b.weightGrams)} g`} />
         {b.lengthMeters != null && <SpecRow k="Length" v={`${Math.round(b.lengthMeters)} m`} />}
         <SpecRow k="Produced" v={formatDateTime(b.producedAt)} />
       </Card>

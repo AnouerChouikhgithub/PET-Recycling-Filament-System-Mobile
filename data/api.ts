@@ -49,6 +49,8 @@ export interface User {
 export interface AuthPayload {
   token: string
   tokenType: 'Bearer'
+  /** Returned by login/register and rotated by /auth/token/refresh. */
+  refresh_token: string
   user: User
 }
 
@@ -101,7 +103,7 @@ export interface FilamentProduction {
   diameterTarget: number
   diameterActual: number | null
   diameterSamples: number[] | null
-  weightGrams: number
+  weightGrams: number | null
   lengthMeters: number | null
   durationMinutes: number | null
   material: string
@@ -151,6 +153,8 @@ export interface MachineDashboardView extends Machine {
   recyclingTotals: RecyclingTotals
 }
 
+export type CommandDelivery = 'published_to_broker' | 'buffered_not_sent'
+
 export interface MachineCommandResult {
   machineId: string
   identifier: string
@@ -158,7 +162,14 @@ export interface MachineCommandResult {
   value: number | null
   topic: string
   accepted: boolean
+  /** Audit-row correlation id; device acks will reference it. */
+  commandId: string
+  /** Broker acceptance only — never proof of physical execution. */
+  delivery: CommandDelivery
+  /** Always false until firmware acknowledgements exist. */
+  deviceAcknowledged: boolean
   sentAt: string
+  expiresAt: string
 }
 
 export type AlertSeverity = 'info' | 'warning' | 'error' | 'success'

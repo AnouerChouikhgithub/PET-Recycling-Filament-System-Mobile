@@ -33,7 +33,9 @@ export const authApi = {
   },
 
   async logout(): Promise<void> {
-    // Stateless JWT: discarding the token IS logout.
+    // The access token is discarded locally. The server-issued refresh token is
+    // not stored yet, so its server-side revocation is not performed; that
+    // needs the token-storage decision tracked in the inventory.
     await setToken(null)
   },
 }
