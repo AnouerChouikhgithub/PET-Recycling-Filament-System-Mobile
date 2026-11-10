@@ -11,5 +11,11 @@
     "outDir": ".test-build",
     "rootDir": "."
   },
-  "include": ["lib/agentContract.ts", "lib/telemetryFreshness.ts"]
+  "include": [
+    "lib/agentContract.ts",
+    "lib/alerts.ts",
+    "lib/commandDelivery.ts",
+    "lib/machineView.ts",
+    "lib/telemetryFreshness.ts"
+  ]
 }
