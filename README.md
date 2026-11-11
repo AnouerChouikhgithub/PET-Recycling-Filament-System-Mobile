@@ -23,6 +23,21 @@ README is the contract).
 3. Restart Metro after changing `.env` (`npm start -- -c`); values are embedded
    at start.
 
+Exact physical-phone sequence (same Wi-Fi, replace the IP with `ipconfig`'s
+IPv4 address of this PC):
+
+```bash
+# terminal 1 — backend reachable from the LAN, not only loopback
+php -S 0.0.0.0:8000 -t public
+
+# terminal 2 — mobile, from the repository root
+EXPO_PUBLIC_API_BASE_URL=http://192.168.1.109:8000/api npm start -- -c
+```
+
+Then scan the QR code. On Windows, allow Node/PHP through the firewall for the
+private network if the phone times out. `127.0.0.1`/`localhost` in the phone's
+browser is the phone itself, never this PC.
+
 Dev accounts come from backend fixtures (dev only):
 `anouer@3awedlou.app` / `3awedlou-dev`.
 
@@ -239,7 +254,7 @@ regenerates app icons, not screenshots.
 | `.env` change ignored | Metro cache | Stop Metro and run `npm start -- -c` |
 | Login returns `429` | Rate limit | Wait `Retry-After`, or relax the limiter in local backend config |
 | Image gallery broken | Wrong relative path | Paths are relative to the repository root |
-| `deviceAcknowledged` always `false` | No firmware ack | Expected until acknowledgements ship |
+| `deviceAcknowledged` always `false` | No matched device ack | Expected without a real gateway publishing `command_ack`; broker acceptance alone never sets it |
 
 ## Roadmap
 
