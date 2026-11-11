@@ -164,9 +164,14 @@ npm run test:render  # jest: 5 suites / 29 tests
 npm test             # tsconfig.tests.json + both suites
 ```
 
-Latest results (2026-11-11, round 4): typecheck passes; **51 Node tests pass** and
-**5 Jest suites / 29 tests pass**. Linting is not configured. Jest prints
-non-fatal `ThemeProvider` `act(...)` warnings.
+Latest results (2026-11-11, round 5): typecheck passes; **51 Node tests pass** and
+**5 Jest suites / 29 tests pass**. Linting is not configured. The three render
+suites mock `lib/storage`, so nothing reaches the native SecureStore and the run
+logs no console errors; a console error in a render test is a failure again.
+
+CI (`.github/workflows/ci.yml`) reads `.nvmrc`, installs with `npm ci`, then
+runs typecheck and `npm test` (Node tests and Jest); no device, emulator or
+network access is required.
 
 The pure modules (`lib/agentContract.ts`, `telemetryFreshness.ts`,
 `machineView.ts`, `commandDelivery.ts`, `alerts.ts`) have no React Native
