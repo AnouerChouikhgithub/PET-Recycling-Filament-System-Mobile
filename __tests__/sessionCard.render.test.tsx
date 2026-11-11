@@ -13,6 +13,10 @@ import { SessionCard } from '../components/SessionCard'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import type { MachineCommandResult } from '../data/api'
 
+jest.mock('../lib/storage', () => ({
+  storage: { getString: () => new Promise<string | null>(() => {}), setString: jest.fn() },
+}))
+
 const mockPush = jest.fn<(severity: string, title: string, message?: string) => void>()
 
 const mockMachine = {

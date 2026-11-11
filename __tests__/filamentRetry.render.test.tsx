@@ -16,6 +16,10 @@ jest.mock('../api', () => ({
   machinesApi: { production: jest.fn() },
 }))
 
+jest.mock('../lib/storage', () => ({
+  storage: { getString: () => new Promise<string | null>(() => {}), setString: jest.fn() },
+}))
+
 jest.mock('../contexts/MachineContext', () => ({
   useMachine: () => ({ selectedId: 'm1' }),
 }))

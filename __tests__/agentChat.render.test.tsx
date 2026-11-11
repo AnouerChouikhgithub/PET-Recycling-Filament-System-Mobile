@@ -18,6 +18,12 @@ import { ThemeProvider } from '../contexts/ThemeContext'
 import { AGENT_MESSAGE_MAX_CHARS, type ChatMessage } from '../lib/agentContract'
 import type { AgentNotice } from '../lib/useAgentChat'
 
+// These component tests do not exercise persistence. Keep the provider's
+// mount effect pending so its async state update cannot escape React act().
+jest.mock('../lib/storage', () => ({
+  storage: { getString: () => new Promise<string | null>(() => {}), setString: jest.fn() },
+}))
+
 function renderWithTheme(ui: ReactElement) {
   return render(<ThemeProvider>{ui}</ThemeProvider>)
 }
