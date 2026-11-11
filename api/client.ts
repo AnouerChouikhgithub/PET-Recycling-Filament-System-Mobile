@@ -12,6 +12,8 @@
  * The JWT lives in expo-secure-store (hardware-backed) — never AsyncStorage.
  */
 import * as SecureStore from 'expo-secure-store'
+import { createSessionRefresher } from '../lib/sessionRefresh'
+import type { TokenPair } from '../lib/sessionRefresh'
 
 /** Minimal shape of the response headers we read (Retry-After). */
 export interface ResponseHeaders {
@@ -37,6 +39,7 @@ export const AUTH_ERROR_EVENT = '3awedlou/auth-error'
 const BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000/api').replace(/\/+$/, '')
 
 const TOKEN_KEY = '3awedlou.auth.token'
+const REFRESH_TOKEN_KEY = '3awedlou.auth.refresh'
 
 let onUnauthorized: (() => void) | null = null
 
@@ -58,13 +61,65 @@ export async function getToken(): Promise<string | null> {
 }
 
 export async function setToken(token: string | null): Promise<void> {
+  await writeSecret(TOKEN_KEY, token)
+}
+
+export async function getRefreshToken(): Promise<string | null> {
   try {
-    if (token) await SecureStore.setItemAsync(TOKEN_KEY, token)
-    else await SecureStore.deleteItemAsync(TOKEN_KEY)
+    return await SecureStore.getItemAsync(REFRESH_TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+async function writeSecret(key: string, value: string | null): Promise<void> {
+  try {
+    if (value) await SecureStore.setItemAsync(key, value)
+    else await SecureStore.deleteItemAsync(key)
   } catch {
     /* secure store unavailable — session stays in memory only */
   }
 }
+
+/** Persists the rotated pair (refresh first) before any retry can run. */
+export async function setTokens(tokens: TokenPair): Promise<void> {
+  await writeSecret(REFRESH_TOKEN_KEY, tokens.refresh_token)
+  await writeSecret(TOKEN_KEY, tokens.token)
+}
+
+/** Removes BOTH tokens — the only local logout primitive. */
+export async function clearSession(): Promise<void> {
+  await writeSecret(REFRESH_TOKEN_KEY, null)
+  await writeSecret(TOKEN_KEY, null)
+}
+
+const refresher = createSessionRefresher(
+  {
+    getRefreshToken,
+    saveTokens: setTokens,
+    clearSession,
+  },
+  {
+    async refresh(refreshToken: string): Promise<TokenPair | null> {
+      const res = await fetch(`${BASE_URL}/auth/token/refresh`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      })
+      if (!res.ok) return null
+
+      const payload = (await res.json()) as {
+        success?: boolean
+        data?: { token?: unknown; refresh_token?: unknown }
+      }
+      const data = payload?.data
+      if (payload?.success === false || typeof data?.token !== 'string' || typeof data?.refresh_token !== 'string') {
+        return null
+      }
+      return { token: data.token, refresh_token: data.refresh_token }
+    },
+  },
+)
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
@@ -93,26 +148,36 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 export async function requestRaw<T>(path: string, options: RequestOptions = {}): Promise<RawResult<T>> {
   const { method = 'GET', body, signal } = options
 
-  const headers: Record<string, string> = { Accept: 'application/json' }
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
-  const token = await getToken()
-  if (token) headers.Authorization = `Bearer ${token}`
+  const send = async (token: string | null): Promise<Response> => {
+    const headers: Record<string, string> = { Accept: 'application/json' }
+    if (body !== undefined) headers['Content-Type'] = 'application/json'
+    if (token) headers.Authorization = `Bearer ${token}`
 
-  let res: Response
-  try {
-    res = await fetch(`${BASE_URL}${path}`, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal,
-    })
-  } catch (err) {
-    if ((err as Error)?.name === 'AbortError') throw err
-    throw new ApiError('NETWORK_ERROR', 'Cannot reach the 3awedlou server. Check your connection and that the API URL in .env points to your backend (LAN IP on physical devices).', 0)
+    try {
+      return await fetch(`${BASE_URL}${path}`, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal,
+      })
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') throw err
+      throw new ApiError('NETWORK_ERROR', 'Cannot reach the 3awedlou server. Check your connection and that the API URL in .env points to your backend (LAN IP on physical devices).', 0)
+    }
+  }
+
+  const initialToken = await getToken()
+  let res = await send(initialToken)
+
+  // /auth/* calls are the session bootstrap itself; refreshing on their 401s
+  // would either loop (refresh) or mask bad credentials (login).
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    const refreshed = await refresher.refresh()
+    if (refreshed) res = await send(refreshed)
   }
 
   if (res.status === 401) {
-    await setToken(null)
+    await clearSession()
     onUnauthorized?.()
     throw new ApiError('UNAUTHORIZED', 'Your session has expired. Please sign in again.', 401)
   }
@@ -147,6 +212,25 @@ export async function requestRaw<T>(path: string, options: RequestOptions = {}):
     meta: (envelope.meta ?? {}) as Record<string, unknown>,
     status: res.status,
     headers: res.headers,
+  }
+}
+
+/**
+ * Best-effort server-side revocation for logout. Never throws and never
+ * triggers the unauthorized handler: local clearing is the logout guarantee.
+ */
+export async function revokeRefreshToken(refreshToken: string): Promise<void> {
+  try {
+    const token = await getToken()
+    const headers: Record<string, string> = { Accept: 'application/json', 'Content-Type': 'application/json' }
+    if (token) headers.Authorization = `Bearer ${token}`
+    await fetch(`${BASE_URL}/auth/logout`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    })
+  } catch {
+    /* offline logout still clears locally */
   }
 }
 

@@ -43,7 +43,7 @@ must be on the same Wi-Fi, or use the Android emulator.
 | `npm run android` | Start + launch on a connected Android device/emulator |
 | `npm run ios` | Start + launch in the iOS simulator (macOS only) |
 | `npm run typecheck` | Strict `tsc --noEmit` |
-| `npm test` | Compiles pure modules, runs 47 Node tests, then 4 Jest suites |
+| `npm test` | Compiles pure modules, runs 51 Node tests, then 5 Jest suites |
 | `npx expo export --platform android --output-dir dist` | Metro production bundle smoke test |
 
 ## Screens and backend calls
@@ -129,7 +129,8 @@ not frozen on stale data. There is no WebSocket/SSE client; setting
 
 | Area | State |
 |---|---|
-| Auth, session restore, secure token storage | Implemented (access token only; refresh storage is Future) |
+| Auth, session restore, secure token storage | Implemented (access + refresh in `expo-secure-store`) |
+| Refresh rotation on 401 (single-flight) | Prepared — mocked fetch/SecureStore tests; no device or live-backend run |
 | Home/Machine/Recycling/Impact/Filament/History/Profile screens | Implemented |
 | Null/stale telemetry, unit and delivery honesty | Implemented (Node + render tests) |
 | Guarded command UI with delivery copy | Implemented (backend guard verified; no physical device) |
@@ -215,10 +216,13 @@ regenerates app icons, not screenshots.
 
 ## Security notes
 
-* The **access token** is stored in `expo-secure-store`. The refresh token is
-  returned by the backend but not stored, and logout only clears the local access
-  token — server-side revocation is not performed yet (open decision, tracked as
-  M04 in the status report).
+* **Both tokens** are stored in `expo-secure-store` (never AsyncStorage). On a
+  401 the client performs ONE single-flight `POST /auth/token/refresh`, persists
+  the rotated pair before retrying, and retries the original request once. If
+  refresh fails it clears both tokens and logs out. Refresh tokens are
+  single-use server-side, so concurrent 401s share one rotation.
+* Logout asks the backend to revoke the stored refresh token (best effort) and
+  **always** clears both local tokens, even offline.
 * Auth surface is rate-limited by the backend (login 5/5 min, register 3/10 min
   per IP).
 * `EXPO_PUBLIC_*` values are never secrets. No tokens, passwords, broker
@@ -243,8 +247,8 @@ regenerates app icons, not screenshots.
 2. MQTT broker integration — prepared (fake-broker tests); live broker, ACL
    isolation and device run still pending.
 3. ESP32 + Arduino Mega gateway — future; bench wiring exists, protocol pending.
-4. Refresh-token storage/rotation and logout revocation — future, blocked on the
-   storage decision.
+4. Refresh-token rotation and logout revocation — implemented in code with
+   mocked tests; a real-device/live-backend run is still pending.
 5. Realtime transport — future (WebSocket/SSE hub).
 6. Push notifications, admin back-office, deployment — future.
 

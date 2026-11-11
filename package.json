@@ -8,7 +8,7 @@
     "ios": "expo start --ios",
     "typecheck": "tsc --noEmit",
     "test": "tsc -p tsconfig.tests.json && npm run test:unit && npm run test:render",
-    "test:unit": "node --test __tests__/agentContract.test.mjs __tests__/alerts.test.mjs __tests__/commandDelivery.test.mjs __tests__/machineView.test.mjs __tests__/telemetryFreshness.test.mjs",
+    "test:unit": "node --test __tests__/agentContract.test.mjs __tests__/alerts.test.mjs __tests__/commandDelivery.test.mjs __tests__/machineView.test.mjs __tests__/sessionRefresh.test.mjs __tests__/telemetryFreshness.test.mjs",
     "test:render": "jest",
     "test:agent": "tsc -p tsconfig.tests.json && node --test __tests__/agentContract.test.mjs"
   },

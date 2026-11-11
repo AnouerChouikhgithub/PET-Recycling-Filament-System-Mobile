@@ -16,6 +16,7 @@
     "lib/alerts.ts",
     "lib/commandDelivery.ts",
     "lib/machineView.ts",
+    "lib/sessionRefresh.ts",
     "lib/telemetryFreshness.ts"
   ]
 }
