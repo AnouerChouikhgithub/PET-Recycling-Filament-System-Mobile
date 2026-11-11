@@ -15,7 +15,7 @@
  *    leave the composer stuck forever (the backend's own provider budget can
  *    legitimately take ~2 minutes, so the bound is generous).
  *
- * Deliberate difference from docs/ai-agent-ui.md §7: backgrounding the app does
+ * Deliberate difference from README: AI assistant: backgrounding the app does
  * NOT abort an in-flight turn. Aborting would discard an answer the user
  * already paid for (tokens were reserved server-side) for no benefit, because
  * React Native keeps the request alive briefly anyway. The design note is

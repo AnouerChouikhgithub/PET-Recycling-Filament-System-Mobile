@@ -6,7 +6,7 @@
  * pure modules would be a large dependency change. `npm test` compiles the pure
  * modules with tsc and runs this file with Node's built-in test runner, so the
  * rules below are really executed — no framework, no mocks of the code under
- * test. (See docs/ai-agent-mobile-step-by-step.md §6.)
+ * test. (See README: AI assistant.)
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
