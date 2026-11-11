@@ -159,13 +159,13 @@ not frozen on stale data. There is no WebSocket/SSE client; setting
 
 ```bash
 npm run typecheck    # tsc --noEmit
-npm run test:unit    # node --test: 47 tests
-npm run test:render  # jest: 4 suites / 23 tests
+npm run test:unit    # node --test: 51 tests
+npm run test:render  # jest: 5 suites / 29 tests
 npm test             # tsconfig.tests.json + both suites
 ```
 
-Latest results (2026-11-11): typecheck passes; **47 Node tests pass** and
-**4 Jest suites / 23 render tests pass**. Linting is not configured. Jest prints
+Latest results (2026-11-11, round 4): typecheck passes; **51 Node tests pass** and
+**5 Jest suites / 29 tests pass**. Linting is not configured. Jest prints
 non-fatal `ThemeProvider` `act(...)` warnings.
 
 The pure modules (`lib/agentContract.ts`, `telemetryFreshness.ts`,
