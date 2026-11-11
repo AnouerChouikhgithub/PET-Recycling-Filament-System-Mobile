@@ -300,6 +300,31 @@ export const FlaskIcon = (p: IconProps) => (
   </Svg>
 )
 
+/* ---------------- AI assistant ---------------- */
+
+export const SparklesIcon = (p: IconProps) => (
+  <Svg {...base(p)}>
+    <Path d="M11 4.2 12.5 9l4.8 1.5L12.5 12 11 16.8 9.5 12 4.7 10.5 9.5 9z" />
+    <Path d="M18.6 3.2l.65 1.9 1.9.65-1.9.65-.65 1.9-.65-1.9-1.9-.65 1.9-.65z" />
+  </Svg>
+)
+
+export const SendIcon = (p: IconProps) => (
+  <Svg {...base(p)}>
+    <Path d="M21 3 3 10.6l6.8 2.6L12.4 21z" />
+    <Path d="M9.8 13.2 21 3" />
+  </Svg>
+)
+
+export const TrashIcon = (p: IconProps) => (
+  <Svg {...base(p)}>
+    <Path d="M4 7h16" />
+    <Path d="M10 4h4" />
+    <Path d="M6.5 7l1 13h9l1-13" />
+    <Path d="M10.5 11v5.5M13.5 11v5.5" />
+  </Svg>
+)
+
 export const LogoIcon = (p: IconProps) => (
   <Svg width={p.size ?? 26} height={p.size ?? 26} viewBox="0 0 24 24" fill="none">
     <Path

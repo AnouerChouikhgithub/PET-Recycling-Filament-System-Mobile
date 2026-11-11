@@ -19,14 +19,12 @@ import { ImpactPage } from './pages/ImpactPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { FilamentPage } from './pages/FilamentPage'
 import { HistoryPage } from './pages/HistoryPage'
+import { AgentChatPage } from './pages/AgentChatPage'
+import type { RootStackParamList } from './lib/navigation'
 
 /* Navigation: 5 primary destinations in the bottom tab bar;
-   History and Filament are pushed as stack screens (deeper content). */
-type RootStackParamList = {
-  Tabs: undefined
-  History: undefined
-  Filament: undefined
-}
+   History, Filament and the AI assistant are pushed as stack screens
+   (deeper content). */
 const Stack = createNativeStackNavigator<RootStackParamList>()
 const Tab = createBottomTabNavigator()
 
@@ -118,6 +116,7 @@ function AppShell() {
         </Stack.Screen>
         <Stack.Screen name="History" component={HistoryPage} />
         <Stack.Screen name="Filament" component={FilamentPage} />
+        <Stack.Screen name="AgentChat" component={AgentChatPage} />
       </Stack.Navigator>
       <NotificationsSheet open={notifOpen} onClose={() => setNotifOpen(false)} />
       <ToastHost />

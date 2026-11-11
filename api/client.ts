@@ -6,10 +6,17 @@
  *  - Bearer token injection (single place)
  *  - envelope unwrapping + ApiError normalization
  *  - 401 handling: clear session once, notify the app (AuthContext listens)
+ *  - requestRaw(): the same call, keeping meta/status/headers for the agent
+ *    module (meta.usage, Retry-After) — every other call site uses request()
  *
  * The JWT lives in expo-secure-store (hardware-backed) — never AsyncStorage.
  */
 import * as SecureStore from 'expo-secure-store'
+
+/** Minimal shape of the response headers we read (Retry-After). */
+export interface ResponseHeaders {
+  get(name: string): string | null
+}
 
 export class ApiError extends Error {
   constructor(
@@ -17,6 +24,8 @@ export class ApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly details?: Record<string, string[]>,
+    /** Response headers when the server answered — used for Retry-After. */
+    public readonly headers?: ResponseHeaders,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -63,8 +72,25 @@ interface RequestOptions {
   signal?: AbortSignal
 }
 
+/**
+ * One response, before unwrapping: the data plus the envelope metadata, the
+ * HTTP status and the headers. Only the agent module needs the raw shape
+ * (meta.usage, Retry-After); every other call site keeps using `request()`.
+ */
+export interface RawResult<T> {
+  data: T
+  meta: Record<string, unknown>
+  status: number
+  headers: ResponseHeaders
+}
+
 /** Single entry point for every API call. Returns unwrapped `data`. */
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  return (await requestRaw<T>(path, options)).data
+}
+
+/** Same as `request`, but keeps meta/status/headers for callers that need them. */
+export async function requestRaw<T>(path: string, options: RequestOptions = {}): Promise<RawResult<T>> {
   const { method = 'GET', body, signal } = options
 
   const headers: Record<string, string> = { Accept: 'application/json' }
@@ -98,7 +124,12 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     throw new ApiError('BAD_RESPONSE', 'The server returned an unexpected response.', res.status)
   }
 
-  const envelope = payload as { success?: boolean; data?: T; error?: { code: string; message: string; details?: Record<string, string[]> } }
+  const envelope = payload as {
+    success?: boolean
+    data?: T
+    meta?: Record<string, unknown>
+    error?: { code: string; message: string; details?: Record<string, string[]> }
+  }
 
   if (!res.ok || envelope.success === false) {
     const error = envelope?.error
@@ -107,12 +138,23 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       error?.message ?? `Request failed (HTTP ${res.status}).`,
       res.status,
       error?.details,
+      res.headers,
     )
   }
 
-  return (envelope.data ?? (payload as T)) as T
+  return {
+    data: (envelope.data ?? (payload as T)) as T,
+    meta: (envelope.meta ?? {}) as Record<string, unknown>,
+    status: res.status,
+    headers: res.headers,
+  }
 }
 
+/**
+ * Convenience wrappers over `request()`. There is deliberately no `del()`:
+ * DELETE is used only by the agent module, which needs `requestRaw()` (status
+ * and headers), so a third helper would be dead code (BUGS-TO-FIX F8).
+ */
 export const api = {
   get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { method: 'GET', signal }),
   post: <T>(path: string, body?: unknown, signal?: AbortSignal) => request<T>(path, { method: 'POST', body, signal }),

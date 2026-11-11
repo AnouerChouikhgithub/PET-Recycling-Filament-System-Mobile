@@ -6,6 +6,7 @@
  * honest polling mode and surfaces that fact to the UI. When the backend
  * realtime hub ships, only this file changes; screens keep their interface.
  */
+import { AppState, type AppStateStatus } from 'react-native'
 import { machinesApi } from '../api'
 import type { MachineDashboardView, MachineTelemetry } from '../data/api'
 
@@ -25,6 +26,7 @@ class RealtimeService {
   private timer: ReturnType<typeof setInterval> | null = null
   private running = false
   private inFlight = false
+  private appStateWatched = false
   private transport: RealtimeTransport = process.env.EXPO_PUBLIC_REALTIME_URL ? 'websocket' : 'polling'
 
   get mode(): RealtimeTransport {
@@ -80,10 +82,29 @@ class RealtimeService {
 
   /** One immediate refresh — used after user actions. */
   refreshNow(): void {
-    if (this.running) void this.poll()
+    if (this.running && isForeground()) void this.poll()
+  }
+
+  /**
+   * A backgrounded app must not keep polling: the OS may suspend/kill the
+   * timer anyway, and the numbers shown on resume would be stale. Pause when
+   * the app leaves the foreground and refresh IMMEDIATELY when it returns
+   * (BUGS-TO-FIX F12). Bound once: this service is an app-lifetime singleton.
+   */
+  private watchAppState(): void {
+    if (this.appStateWatched) return
+    this.appStateWatched = true
+    AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (this.transport !== 'polling' || !this.running) return
+      if (state === 'active') this.startPolling()
+      else this.stopPolling()
+    })
   }
 
   private startPolling(): void {
+    this.watchAppState()
+    this.stopPolling()
+    if (!isForeground()) return // the AppState listener resumes us
     void this.poll()
     this.timer = setInterval(() => void this.poll(), REFRESH_MS)
   }
@@ -108,6 +129,15 @@ class RealtimeService {
       this.inFlight = false
     }
   }
+}
+
+/**
+ * `currentState` is briefly 'unknown' at startup, so only the two states that
+ * really mean "not on screen" count as backgrounded.
+ */
+function isForeground(): boolean {
+  const state = AppState.currentState
+  return state !== 'background' && state !== 'inactive'
 }
 
 export const realtimeService = new RealtimeService()
