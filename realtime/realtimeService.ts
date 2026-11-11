@@ -27,7 +27,8 @@ class RealtimeService {
   private running = false
   private inFlight = false
   private appStateWatched = false
-  private transport: RealtimeTransport = process.env.EXPO_PUBLIC_REALTIME_URL ? 'websocket' : 'polling'
+  // A configured URL is not a transport until a real client is implemented.
+  private readonly transport: RealtimeTransport = 'polling'
 
   get mode(): RealtimeTransport {
     return this.transport
@@ -50,7 +51,7 @@ class RealtimeService {
     this.stopPolling()
     this.machineId = machineId
     this.running = true
-    if (this.transport === 'polling') this.startPolling()
+    this.startPolling()
   }
 
   unsubscribe(): void {
@@ -95,7 +96,7 @@ class RealtimeService {
     if (this.appStateWatched) return
     this.appStateWatched = true
     AppState.addEventListener('change', (state: AppStateStatus) => {
-      if (this.transport !== 'polling' || !this.running) return
+      if (!this.running) return
       if (state === 'active') this.startPolling()
       else this.stopPolling()
     })

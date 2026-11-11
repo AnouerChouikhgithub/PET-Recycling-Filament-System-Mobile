@@ -10,8 +10,8 @@
  *   → realtimeService subscription (polling today, WebSocket later)
  *   → useMachine() feeds Home, Machine, Recycling, Impact, Profile pages.
  *
- * Sensor/subsystem view models are DERIVED from real telemetry; when a channel
- * has no data the UI shows zeros/empties — nothing is fabricated.
+ * Sensor/subsystem view models preserve null and freshness: absent channels
+ * render as unreported, never as fabricated zero/off values.
  */
 import {
   createContext,
@@ -24,9 +24,13 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { machinesApi, sendMachineCommand } from '../api'
+import type { MachineCommandResult } from '../data/api'
 import { realtimeService } from '../realtime/realtimeService'
 import { useAuth } from './AuthContext'
 import { timeAgo } from '../lib/format'
+import { markAllAsRead, countUnread } from '../lib/alerts'
+import { buildSensors, buildSubsystems } from '../lib/machineView'
+import type { SensorReading, Subsystem } from '../lib/machineView'
 import type {
   Machine,
   MachineAlert,
@@ -37,26 +41,7 @@ import type {
   RecyclingTotals,
 } from '../data/api'
 
-export interface SensorReading {
-  id: 'temp' | 'motor' | 'fan' | 'feed'
-  label: string
-  shortLabel: string
-  unit: string
-  value: number
-  target: number
-  status: 'nominal' | 'warning' | 'error'
-  history: number[]
-  min: number
-  max: number
-  decimals?: number
-}
-
-export interface Subsystem {
-  key: 'heater' | 'motor' | 'cooling' | 'spooler'
-  label: string
-  detail: string
-  state: 'on' | 'off' | 'fault'
-}
+export type { SensorReading, Subsystem } from '../lib/machineView'
 
 interface MachineCtx {
   /** True once the initial machine list load resolves. */
@@ -79,11 +64,11 @@ interface MachineCtx {
   telemetry: MachineTelemetry | null
   recentTelemetry: MachineTelemetry[]
   recyclingTotals: RecyclingTotals
-  startSession: (args: { petInputG: number; operator: string }) => Promise<void>
-  pauseSession: () => Promise<void>
-  resumeSession: () => Promise<void>
-  stopSession: () => Promise<void>
-  sendCommand: (command: MachineCommandType, value?: number) => Promise<void>
+  startSession: (args: { petInputG: number; operator: string }) => Promise<MachineCommandResult>
+  pauseSession: () => Promise<MachineCommandResult>
+  resumeSession: () => Promise<MachineCommandResult>
+  stopSession: () => Promise<MachineCommandResult>
+  sendCommand: (command: MachineCommandType, value?: number) => Promise<MachineCommandResult>
   markAlertRead: (id: string) => void
   markAllAlertsRead: () => void
 }
@@ -103,111 +88,6 @@ export interface MachineState {
 }
 
 const Ctx = createContext<MachineCtx | null>(null)
-
-const TEMP_TARGET_FALLBACK = 195
-
-const deviation = (value: number, ref: number) => Math.abs(value - ref) / Math.max(1, Math.abs(ref))
-
-function buildSensors(view: MachineDashboardView): SensorReading[] {
-  const t = view.telemetry
-  const historyOf = (pick: (s: MachineTelemetry) => number | null): number[] =>
-    view.recentTelemetry.map(pick).filter((v): v is number => v !== null).slice(-24)
-
-  const target = t?.targetTemperature ?? TEMP_TARGET_FALLBACK
-  const tempValue = t?.temperature ?? 0
-  const tempStatus: SensorReading['status'] =
-    t?.temperature == null
-      ? 'nominal'
-      : deviation(t.temperature, target) > 0.18
-        ? 'error'
-        : deviation(t.temperature, target) > 0.09
-          ? 'warning'
-          : 'nominal'
-
-  return [
-    {
-      id: 'temp',
-      label: 'Extruder Temp',
-      shortLabel: 'Extruder',
-      unit: '°C',
-      value: tempValue,
-      target,
-      status: tempStatus,
-      history: historyOf((s) => s.temperature),
-      min: 0,
-      max: 300,
-    },
-    {
-      id: 'motor',
-      label: 'Motor Speed',
-      shortLabel: 'Motor',
-      unit: 'RPM',
-      value: t?.motorSpeed ?? 0,
-      target: t?.motorSpeed ?? 0,
-      status: 'nominal',
-      history: historyOf((s) => s.motorSpeed),
-      min: 0,
-      max: 100,
-    },
-    {
-      id: 'fan',
-      label: 'Cooling Fan',
-      shortLabel: 'Cooling',
-      unit: '%',
-      value: t?.fanState ? 100 : 0,
-      target: t?.fanState ? 100 : 0,
-      status: 'nominal',
-      history: historyOf((s) => (s.fanState ? 100 : 0)),
-      min: 0,
-      max: 100,
-    },
-    {
-      id: 'feed',
-      label: 'Feed Rate',
-      shortLabel: 'Feed',
-      unit: 'mm/s',
-      value: t?.filamentSpeed ?? 0,
-      target: t?.filamentSpeed ?? 0,
-      status: 'nominal',
-      history: historyOf((s) => s.filamentSpeed),
-      min: 0,
-      max: 6,
-      decimals: 1,
-    },
-  ]
-}
-
-function buildSubsystems(view: MachineDashboardView): Subsystem[] {
-  const t = view.telemetry
-  const offline = view.status === 'offline'
-  const running = !offline && view.activeSession != null
-  return [
-    {
-      key: 'heater',
-      label: 'Heater',
-      detail: t?.targetTemperature != null ? `Target ${Math.round(t.targetTemperature)}°C` : 'Standby',
-      state: !offline && (t?.heaterState ?? false) ? 'on' : 'off',
-    },
-    {
-      key: 'motor',
-      label: 'Extruder Motor',
-      detail: t?.motorSpeed != null ? `${Math.round(t.motorSpeed)} RPM` : 'Standby',
-      state: !offline && (t?.motorState ?? false) ? 'on' : 'off',
-    },
-    {
-      key: 'cooling',
-      label: 'Cooling',
-      detail: t?.fanState != null ? `Fan ${t.fanState ? 'on' : 'off'}` : 'Standby',
-      state: !offline && (t?.fanState ?? false) ? 'on' : 'off',
-    },
-    {
-      key: 'spooler',
-      label: 'Spooler',
-      detail: running ? 'Session in progress' : 'Idle',
-      state: running ? 'on' : 'off',
-    },
-  ]
-}
 
 export function MachineProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
@@ -319,18 +199,14 @@ export function MachineProvider({ children }: { children: ReactNode }) {
   }, [selectedId, dashboard])
 
   const markAlertRead = useCallback((id: string) => setReadIds((ids) => (ids.includes(id) ? ids : [...ids, id])), [])
-  const markAllAlertsRead = useCallback(
-    () => setReadIds((ids) => Array.from(new Set([...ids]))),
-    [],
-  )
 
   /* -------- commands -------- */
   const sendCommand = useCallback(
-    async (command: MachineCommandType, value?: number): Promise<void> => {
+    async (command: MachineCommandType, value?: number): Promise<MachineCommandResult> => {
       const id = selectedRef.current
       if (!id) throw new Error('No machine selected.')
       try {
-        await sendMachineCommand(id, command, value)
+        return await sendMachineCommand(id, command, value)
       } finally {
         refreshDashboard(id)
       }
@@ -339,17 +215,18 @@ export function MachineProvider({ children }: { children: ReactNode }) {
   )
 
   const startSession = useCallback(
-    async ({ petInputG }: { petInputG: number; operator: string }) => {
+    async ({ petInputG }: { petInputG: number; operator: string }): Promise<MachineCommandResult> => {
       // The guarded 'start' command begins the machine's run; the PET amount is
       // recorded with the session by the firmware layer when hardware lands.
-      await sendCommand('start')
+      const result = await sendCommand('start')
       void petInputG
+      return result
     },
     [sendCommand],
   )
-  const pauseSession = useCallback(async () => sendCommand('pause'), [sendCommand])
-  const resumeSession = useCallback(async () => sendCommand('resume'), [sendCommand])
-  const stopSession = useCallback(async () => sendCommand('stop'), [sendCommand])
+  const pauseSession = useCallback(() => sendCommand('pause'), [sendCommand])
+  const resumeSession = useCallback(() => sendCommand('resume'), [sendCommand])
+  const stopSession = useCallback(() => sendCommand('stop'), [sendCommand])
 
   const refresh = useCallback(() => {
     const id = selectedRef.current
@@ -377,7 +254,7 @@ export function MachineProvider({ children }: { children: ReactNode }) {
       status: dashboard?.status ?? 'offline',
       connected: dashboard ? dashboard.status !== 'offline' : false,
       deviceName: dashboard?.identifier ?? '—',
-      firmware: 'managed by backend',
+      firmware: 'Not reported',
       currentSessionId: dashboard?.activeSession?.id ?? null,
       petInputG: Math.round(dashboard?.activeSession?.materialInput ?? 0),
       // Only real measurements count: output is null until the machine ends the run.
@@ -412,7 +289,7 @@ export function MachineProvider({ children }: { children: ReactNode }) {
         id: 'session-running',
         severity: 'info',
         title: 'Session in progress',
-        message: 'The machine is recycling PET into filament right now.',
+        message: 'A recycling session is marked in progress. Confirm physical activity from fresh telemetry.',
         date: dashboard.activeSession.startedAt,
         read: false,
       })
@@ -423,6 +300,10 @@ export function MachineProvider({ children }: { children: ReactNode }) {
   const alertsView = useMemo(
     () => alerts.map((a) => ({ ...a, read: readIds.includes(a.id) })),
     [alerts, readIds],
+  )
+  const markAllAlertsRead = useCallback(
+    () => setReadIds((ids) => markAllAsRead(ids, alerts.map((alert) => alert.id))),
+    [alerts],
   )
 
   const value = useMemo<MachineCtx>(
@@ -436,7 +317,7 @@ export function MachineProvider({ children }: { children: ReactNode }) {
       alerts: alertsView,
       sessions,
       currentSession,
-      unreadAlerts: alertsView.filter((a) => !a.read).length,
+      unreadAlerts: countUnread(alertsView, readIds),
       realtimeMode: realtimeService.mode,
       machines,
       selectedId,
@@ -462,6 +343,7 @@ export function MachineProvider({ children }: { children: ReactNode }) {
       sensors,
       subsystems,
       alertsView,
+      readIds,
       sessions,
       currentSession,
       machines,

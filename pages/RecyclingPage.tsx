@@ -57,8 +57,8 @@ export function RecyclingPage() {
     [sessions, filter],
   )
 
-  const petKg = (recyclingTotals.inputGrams ?? 0) / 1000
-  const filKg = (recyclingTotals.outputGrams ?? 0) / 1000
+  const petKg = recyclingTotals.inputGrams == null ? null : recyclingTotals.inputGrams / 1000
+  const filKg = recyclingTotals.outputGrams == null ? null : recyclingTotals.outputGrams / 1000
 
   return (
     <ScrollView
@@ -81,8 +81,8 @@ export function RecyclingPage() {
 
       {/* Summary tiles — measured totals from the backend */}
       <View style={styles.tileRow}>
-        <SummaryTile icon={<BottleIcon size={17} color={theme.accentStrong} />} value={petKg.toFixed(1)} unit="kg" label="PET recycled" />
-        <SummaryTile icon={<SpoolerIcon size={17} color={theme.accentStrong} />} value={filKg.toFixed(1)} unit="kg" label="Filament made" />
+        <SummaryTile icon={<BottleIcon size={17} color={theme.accentStrong} />} value={petKg == null ? 'Not reported' : petKg.toFixed(1)} unit="kg" label="PET recycled" />
+        <SummaryTile icon={<SpoolerIcon size={17} color={theme.accentStrong} />} value={filKg == null ? 'Not reported' : filKg.toFixed(1)} unit="kg" label="Filament made" />
         <SummaryTile icon={<CalendarIcon size={17} color={theme.accentStrong} />} value={String(recyclingTotals.records)} label="Records" />
       </View>
 
@@ -199,7 +199,11 @@ function SessionRow({
         </Text>
         <Text numberOfLines={1} style={{ fontSize: 12, color: theme.text2 }}>
           {s.materialInput != null ? `${Math.round(s.materialInput)} g PET` : 'PET'} →
-          {s.materialOutput != null ? ` ${Math.round(s.materialOutput)} g filament` : ' in progress'}
+          {s.materialOutput != null
+            ? ` ${Math.round(s.materialOutput)} g filament`
+            : s.status === 'in_progress' || s.status === 'paused'
+              ? ' output pending'
+              : ' output not reported'}
         </Text>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -242,7 +246,7 @@ function BatchList({ batches }: { batches: FilamentProduction[] }) {
               {b.batchCode} · {b.color}
             </Text>
             <Text numberOfLines={1} style={{ fontSize: 12, color: theme.text2 }}>
-              {Math.round(b.weightGrams)} g · {b.diameterTarget} mm · {timeAgo(b.producedAt)}
+              {b.weightGrams == null ? 'Weight not reported' : `${Math.round(b.weightGrams)} g`} · {b.diameterTarget} mm · {timeAgo(b.producedAt)}
             </Text>
           </View>
           <ChevronRightIcon size={15} color={theme.text3} />

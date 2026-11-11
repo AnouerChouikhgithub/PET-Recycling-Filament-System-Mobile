@@ -7,7 +7,7 @@
  *   - AgentConfig::MIN_MESSAGE_CHARS = 1, AGENT_MSG_MAX_CHARS default = 4000
  *   - 422 VALIDATION_FAILED            (message length / body shape)
  *   - 429 AGENT_RATE_LIMITED           + Retry-After: <seconds>
- *   - 429 AGENT_DAILY_TOKEN_CAP        + Retry-After: 60
+ *   - 429 AGENT_DAILY_TOKEN_CAP        + Retry-After: seconds until 00:00 UTC
  *   - 503 AGENT_LLM_UNAVAILABLE        + Retry-After: 5
  *   - 404 AGENT_NOT_FOUND              (conversation unknown or foreign)
  *   - 404 code NOT_FOUND, message AGENT_DISABLED (flag off; the whole surface
@@ -126,9 +126,10 @@ export function describeAgentFailure(failure: AgentFailure): AgentRequestError {
       break
   }
 
-  // 404 without AGENT_NOT_FOUND = the whole assistant surface is switched off
-  // (AGENT_DISABLED is rendered with the generic NOT_FOUND code).
-  if (status === 404) {
+  // The backend masks the disabled surface as 404 + generic NOT_FOUND code,
+  // with the explicit AGENT_DISABLED marker in its message. Other 404s are
+  // routing/resource failures and must not be misreported as disabled.
+  if (status === 404 && failure.code === 'NOT_FOUND' && failure.message?.includes('AGENT_DISABLED')) {
     return new AgentRequestError('disabled', 'The assistant is not available right now.', null, 404)
   }
   if (status === 401) {
@@ -138,7 +139,7 @@ export function describeAgentFailure(failure: AgentFailure): AgentRequestError {
   return new AgentRequestError('unknown', 'Something went wrong. Please try again.', null, status)
 }
 
-/** True only for the disabled surface (404 without AGENT_NOT_FOUND). */
+/** True only for the backend's explicit disabled-surface response. */
 export function isAgentDisabled(error: unknown): boolean {
   return error instanceof AgentRequestError && error.kind === 'disabled'
 }

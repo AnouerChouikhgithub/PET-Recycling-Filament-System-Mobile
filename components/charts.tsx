@@ -16,17 +16,17 @@ export function Gauge({
   status = 'nominal',
   target,
 }: {
-  value: number
+  value: number | null
   min: number
   max: number
   label: string
   unit: string
   decimals?: number
   status?: 'nominal' | 'warning' | 'error'
-  target?: number
+  target?: number | null
 }) {
   const { theme } = useTheme()
-  const pct = clamp01((value - min) / (max - min || 1))
+  const pct = value == null ? 0 : clamp01((value - min) / (max - min || 1))
   const stroke =
     status === 'error' ? theme.danger : status === 'warning' ? theme.warning : theme.green500
   const r = 30
@@ -79,14 +79,14 @@ export function Gauge({
           pointerEvents="none"
         >
           <Text style={{ fontSize: 17, fontWeight: '800', color: theme.text, letterSpacing: -0.3 }}>
-            {value.toFixed(decimals)}
+            {value == null ? 'Not reported' : value.toFixed(decimals)}
           </Text>
           <Text style={{ fontSize: 8.5, fontWeight: '700', color: theme.text3, letterSpacing: 0.6 }}>
-            {unit.toUpperCase()}
+            {unit === 'unit unverified' ? unit : unit.toUpperCase()}
           </Text>
         </View>
       </View>
-      {target !== undefined && (
+      {target != null && (
         <Text style={{ fontSize: 10, color: theme.text3, fontWeight: '600' }}>
           Tgt {target}
           {unit}

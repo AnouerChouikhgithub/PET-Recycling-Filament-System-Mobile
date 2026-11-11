@@ -85,7 +85,7 @@ export function HistoryPage() {
           title: `Session ${s.id.slice(0, 8)}`,
           sub:
             s.status === 'in_progress' || s.status === 'paused'
-              ? `${s.materialInput != null ? `${Math.round(s.materialInput)} g PET` : 'PET'} · running now`
+              ? `${s.materialInput != null ? `${Math.round(s.materialInput)} g PET` : 'PET'} · session open`
               : `${s.materialInput != null ? `${Math.round(s.materialInput)} g PET` : 'PET'} → ${s.materialOutput != null ? `${Math.round(s.materialOutput)} g filament` : 'no output'}`,
           badge: SESSION_BADGE[s.status],
           tone:
@@ -105,7 +105,7 @@ export function HistoryPage() {
           date: b.producedAt,
           kind: 'filament' as const,
           title: `Batch ${b.batchCode} · ${b.color}`,
-          sub: `${Math.round(b.weightGrams)} g · ${b.diameterActual != null ? b.diameterActual.toFixed(2) : b.diameterTarget.toFixed(2)} mm · ${b.quality} quality`,
+          sub: `${b.weightGrams == null ? 'Weight not reported' : `${Math.round(b.weightGrams)} g`} · ${b.diameterActual != null ? b.diameterActual.toFixed(2) : b.diameterTarget.toFixed(2)} mm · ${b.quality} quality`,
           timeLabel: timeAgo(b.producedAt),
           tone: { bg: theme.surface3, color: theme.text2 },
           glyph: 'batch' as const,
@@ -179,7 +179,7 @@ export function HistoryPage() {
           b.color,
           b.diameterTarget,
           b.diameterActual ?? '',
-          Math.round(b.weightGrams),
+          b.weightGrams == null ? '' : Math.round(b.weightGrams),
           b.quality,
         ]),
       ])

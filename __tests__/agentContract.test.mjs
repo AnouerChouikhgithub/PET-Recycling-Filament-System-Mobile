@@ -6,7 +6,7 @@
  * pure modules would be a large dependency change. `npm test` compiles the pure
  * modules with tsc and runs this file with Node's built-in test runner, so the
  * rules below are really executed — no framework, no mocks of the code under
- * test. (See docs/ai-agent-mobile-step-by-step.md §6.)
+ * test. (See README: AI assistant.)
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -67,18 +67,19 @@ test('describeAgentFailure maps the documented backend codes', () => {
   }
 })
 
-test('describeAgentFailure treats 404 without AGENT_NOT_FOUND as disabled', () => {
-  // AGENT_ENABLED=false answers 404 with the generic NOT_FOUND code.
+test('describeAgentFailure detects only the explicit disabled-surface 404', () => {
+  // AGENT_ENABLED=false answers 404 with the generic NOT_FOUND code and marker.
   assert.equal(describeAgentFailure({ code: 'NOT_FOUND', message: 'AGENT_DISABLED', status: 404 }).kind, 'disabled')
-  assert.equal(describeAgentFailure({ status: 404 }).kind, 'disabled')
+  assert.equal(describeAgentFailure({ code: 'NOT_FOUND', message: 'Not found.', status: 404 }).kind, 'unknown')
+  assert.equal(describeAgentFailure({ code: 'ROUTE_NOT_FOUND', message: 'Not found.', status: 404 }).kind, 'unknown')
 })
 
 test('describeAgentFailure keeps Retry-After seconds on the limit paths', () => {
   const limited = describeAgentFailure({ code: 'AGENT_RATE_LIMITED', status: 429, retryAfterSeconds: 42 })
   assert.equal(limited.retryAfterSeconds, 42)
 
-  const cap = describeAgentFailure({ code: 'AGENT_DAILY_TOKEN_CAP', status: 429, retryAfterSeconds: 60 })
-  assert.equal(cap.retryAfterSeconds, 60)
+  const cap = describeAgentFailure({ code: 'AGENT_DAILY_TOKEN_CAP', status: 429, retryAfterSeconds: 3661 })
+  assert.equal(cap.retryAfterSeconds, 3661)
 })
 
 test('describeAgentFailure marks an aborted request and never retries it silently', () => {

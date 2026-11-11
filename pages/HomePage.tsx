@@ -38,8 +38,8 @@ export function HomePage() {
     return () => clearInterval(id)
   }, [])
 
-  const petKg = (recyclingTotals.inputGrams ?? 0) / 1000
-  const filamentKg = (recyclingTotals.outputGrams ?? 0) / 1000
+  const petKg = recyclingTotals.inputGrams == null ? null : recyclingTotals.inputGrams / 1000
+  const filamentKg = recyclingTotals.outputGrams == null ? null : recyclingTotals.outputGrams / 1000
 
   const recentAlerts = alerts.slice(0, 4)
 
@@ -59,13 +59,13 @@ export function HomePage() {
           GOOD TO SEE YOU, {userName.toUpperCase()}
         </Text>
         <Text style={{ fontSize: 25, fontWeight: '800', letterSpacing: -0.5, color: theme.text, lineHeight: 30 }}>
-          {currentSession ? 'Your machine is recycling.' : machine.connected ? 'Your machine is ready.' : 'Machine is offline.'}
+          {currentSession ? 'A session is marked in progress.' : machine.connected ? 'Machine is connected.' : 'Machine is offline.'}
         </Text>
         <Text style={{ fontSize: 13, color: theme.text2, lineHeight: 19 }}>
           {machine.connected
             ? currentSession
-              ? 'Session running — turning used PET into fresh filament.'
-              : 'Connected to the 3awedlou backend and reporting.'
+              ? 'Session status is reported by the backend; confirm physical activity from fresh telemetry.'
+              : 'The backend reports the machine online.'
             : 'The machine has not reported recently. Check its connection.'}
         </Text>
       </View>
@@ -85,7 +85,7 @@ export function HomePage() {
         {machine.connected && temp ? (
           <View style={styles.sensorStrip}>
             <Gauge value={temp.value} min={0} max={temp.max} label="Extruder" unit="°C" status={temp.status} target={temp.target} />
-            <Gauge value={motor.value} min={0} max={motor.max} label="Motor" unit="RPM" status={motor.status} target={motor.target} />
+            <Gauge value={motor.value} min={0} max={motor.max} label="Motor" unit={motor.unit} status={motor.status} target={motor.target} />
             <Gauge value={fan.value} min={0} max={fan.max} label="Cooling" unit="%" status={fan.status} target={fan.target} />
           </View>
         ) : (
@@ -107,19 +107,19 @@ export function HomePage() {
       <View style={styles.tileRow}>
         <QuickTile
           icon={<BottleIcon size={17} color={theme.accentStrong} />}
-          value={petKg.toFixed(1)}
+          value={petKg == null ? 'Not reported' : petKg.toFixed(1)}
           unit="kg"
           label="PET recycled"
         />
         <QuickTile
           icon={<SpoolerIcon size={17} color={theme.accentStrong} />}
-          value={filamentKg.toFixed(1)}
+          value={filamentKg == null ? 'Not reported' : filamentKg.toFixed(1)}
           unit="kg"
           label="Filament total"
         />
         <QuickTile
           icon={<BottleIcon size={17} color={theme.accentStrong} />}
-          value={`≈ ${formatNumber(Math.round(petKg * 25))}`}
+          value={petKg == null ? 'Not reported' : `≈ ${formatNumber(Math.round(petKg * 25))}`}
           label="Bottles equiv."
         />
       </View>
@@ -139,7 +139,7 @@ export function HomePage() {
         <View style={{ marginTop: 6 }}>
           {recentAlerts.length === 0 ? (
             <Text style={{ fontSize: 13, color: theme.text2, paddingHorizontal: spacing.lg, paddingVertical: 12 }}>
-              Nothing to report — the machine is behaving normally.
+              No recent activity is recorded.
             </Text>
           ) : (
             recentAlerts.map((ev) => {

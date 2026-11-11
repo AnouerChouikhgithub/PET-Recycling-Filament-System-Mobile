@@ -1,5 +1,5 @@
 /** Endpoint wrappers — same routes as web-app/src/api/*. */
-import { api, setToken } from './client'
+import { api, clearSession, getRefreshToken, revokeRefreshToken, setTokens } from './client'
 import type {
   AuthPayload,
   FilamentProduction,
@@ -18,13 +18,13 @@ import type {
 export const authApi = {
   async login(email: string, password: string): Promise<AuthPayload> {
     const data = await api.post<AuthPayload>('/auth/login', { email, password })
-    await setToken(data.token)
+    await setTokens({ token: data.token, refresh_token: data.refresh_token })
     return data
   },
 
   async register(email: string, password: string, name: string): Promise<AuthPayload> {
     const data = await api.post<AuthPayload>('/auth/register', { email, password, name })
-    await setToken(data.token)
+    await setTokens({ token: data.token, refresh_token: data.refresh_token })
     return data
   },
 
@@ -33,8 +33,11 @@ export const authApi = {
   },
 
   async logout(): Promise<void> {
-    // Stateless JWT: discarding the token IS logout.
-    await setToken(null)
+    // Best effort: revoke the stored refresh token server-side, then ALWAYS
+    // clear both local tokens even when offline or already expired.
+    const refreshToken = await getRefreshToken()
+    if (refreshToken) await revokeRefreshToken(refreshToken)
+    await clearSession()
   },
 }
 

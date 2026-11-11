@@ -15,7 +15,7 @@
  *    leave the composer stuck forever (the backend's own provider budget can
  *    legitimately take ~2 minutes, so the bound is generous).
  *
- * Deliberate difference from docs/ai-agent-ui.md §7: backgrounding the app does
+ * Deliberate difference from README: AI assistant: backgrounding the app does
  * NOT abort an in-flight turn. Aborting would discard an answer the user
  * already paid for (tokens were reserved server-side) for no benefit, because
  * React Native keeps the request alive briefly anyway. The design note is
@@ -44,7 +44,7 @@ export interface AgentChat {
   conversationId: string | null
   sending: boolean
   notice: AgentNotice | null
-  /** 404 without AGENT_NOT_FOUND — the whole assistant surface is switched off. */
+  /** The backend's explicit AGENT_DISABLED response means the surface is switched off. */
   disabled: boolean
   /** Seconds left before the per-user rate limit window reopens (null = none). */
   rateLimitRemainingSeconds: number | null

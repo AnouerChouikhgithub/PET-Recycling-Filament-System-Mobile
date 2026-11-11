@@ -1,5 +1,5 @@
 {
-  "//": "Compiles the PURE modules (no React Native, no Expo) so they can be exercised by node --test in __tests__/. See docs/ai-agent-mobile-step-by-step.md.",
+  "//": "Compiles the PURE modules (no React Native, no Expo) so they can be exercised by node --test in __tests__/. See README: AI assistant.",
   "compilerOptions": {
     "target": "ES2021",
     "module": "node16",
@@ -11,5 +11,12 @@
     "outDir": ".test-build",
     "rootDir": "."
   },
-  "include": ["lib/agentContract.ts", "lib/telemetryFreshness.ts"]
+  "include": [
+    "lib/agentContract.ts",
+    "lib/alerts.ts",
+    "lib/commandDelivery.ts",
+    "lib/machineView.ts",
+    "lib/sessionRefresh.ts",
+    "lib/telemetryFreshness.ts"
+  ]
 }
